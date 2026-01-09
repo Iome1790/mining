@@ -28,7 +28,6 @@ export default function Layout({ children }: LayoutProps) {
   }
 
   const navItems = [
-    { href: "/create-task", icon: Plus, label: "ADD TASK" },
     { href: "/affiliates", icon: HeartHandshake, label: "INVITE" },
     { href: "/withdraw", icon: CircleDollarSign, label: "PAYOUT" },
   ];
@@ -40,9 +39,8 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="h-screen w-full flex flex-col bg-black overflow-hidden">
-      {!showSeasonEnd && <Header />}
       
-      <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingBottom: '90px', paddingTop: '56px' }}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingBottom: '90px' }}>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location}
