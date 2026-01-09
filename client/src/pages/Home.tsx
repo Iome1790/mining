@@ -7,7 +7,8 @@ import React from "react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useAdFlow } from "@/hooks/useAdFlow";
 import { useLocation } from "wouter";
-import { Award, Wallet, RefreshCw, Flame, Ticket, Clock, Loader2, Gift, Rocket, X, Bug, DollarSign, Coins, Send, Users, Check, ExternalLink, Plus, CalendarCheck, Bell, Star, Play, Sparkles, Zap } from "lucide-react";
+import { SettingsPopup } from "@/components/SettingsPopup";
+import { Award, Wallet, RefreshCw, Flame, Ticket, Info, User as UserIcon, Clock, Loader2, Gift, Rocket, X, Bug, DollarSign, Coins, Send, Users, Check, ExternalLink, Plus, CalendarCheck, Bell, Star, Play, Sparkles, Zap, Settings } from "lucide-react";
 import { DiamondIcon } from "@/components/DiamondIcon";
 import { Button } from "@/components/ui/button";
 import { showNotification } from "@/components/AppNotification";
@@ -71,6 +72,7 @@ export default function Home() {
   const [promoPopupOpen, setPromoPopupOpen] = useState(false);
   const [convertPopupOpen, setConvertPopupOpen] = useState(false);
   const [boosterPopupOpen, setBoosterPopupOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedConvertType, setSelectedConvertType] = useState<'USD' | 'TON' | 'BUG'>('USD');
   const [convertAmount, setConvertAmount] = useState<string>("");
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
@@ -130,7 +132,7 @@ export default function Home() {
 
   const currentTask = unifiedTasksData?.tasks?.[0] || null;
 
-  React.useEffect(() => {
+  useEffect(() => {
     const updateTimer = () => {
       const now = new Date();
       const typedUser = user as User;
@@ -280,6 +282,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || 'Failed to start task');
@@ -299,7 +302,7 @@ export default function Home() {
       // Step 1: Real-time verification for channel tasks
       if (taskType === 'channel' && link) {
         const username = link.replace('https://t.me/', '').split('?')[0];
-        const currentTelegramData = getTelegramInitData();
+        const currentTelegramData = (window as any).Telegram?.WebApp?.initData || '';
         
         const resVerify = await fetch('/api/tasks/verify/channel', {
           method: 'POST',
@@ -364,9 +367,9 @@ export default function Home() {
 
   const showAdsgramAd = (): Promise<boolean> => {
     return new Promise(async (resolve) => {
-      if (window.Adsgram) {
+      if ((window as any).Adsgram) {
         try {
-          await window.Adsgram.init({ blockId: "int-20373" }).show();
+          await (window as any).Adsgram.init({ blockId: "int-20373" }).show();
           resolve(true);
         } catch (error) {
           console.error('Adsgram ad error:', error);
@@ -420,6 +423,15 @@ export default function Home() {
     setConvertPopupOpen(true);
   };
 
+  const rawBalance = parseFloat((user as User)?.balance || "0");
+  const padBalance = rawBalance < 1 ? Math.round(rawBalance * 10000000) : Math.round(rawBalance);
+  const balanceUSD = parseFloat((user as User)?.usdBalance || "0");
+  const balanceBUG = parseFloat((user as User)?.bugBalance || "0");
+  
+  const userUID = (user as User)?.referralCode || "00000";
+  const displayName = (user as User)?.firstName || (user as User)?.username || "User";
+  const photoUrl = typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.photo_url;
+
   const handleConvertConfirm = async () => {
     const amount = parseFloat(convertAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -438,7 +450,7 @@ export default function Home() {
       return;
     }
 
-    if (balancePAD < amount) {
+    if (padBalance < amount) {
       showNotification("Insufficient PAD balance", "error");
       return;
     }
@@ -476,6 +488,8 @@ export default function Home() {
       setIsConverting(false);
     }
   };
+
+  const canClaimStreak = !hasClaimed;
 
   const handleClaimStreak = async () => {
     if (isClaimingStreak || hasClaimed) return;
@@ -605,172 +619,49 @@ export default function Home() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="flex gap-1 justify-center mb-4">
-            <div className="w-2 h-2 rounded-full bg-[#4cd3ff] animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-2 h-2 rounded-full bg-[#4cd3ff] animate-bounce" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-2 h-2 rounded-full bg-[#4cd3ff] animate-bounce" style={{ animationDelay: '300ms' }}></div>
-          </div>
-          <div className="text-foreground font-medium">Loading...</div>
-        </div>
-      </div>
-    );
-  }
+  const referralLink = userData?.referralCode ? `https://t.me/MoneyAdzBot?start=${userData.referralCode}` : "";
 
-  const rawBalance = parseFloat((user as User)?.balance || "0");
-  const balancePAD = rawBalance < 1 ? Math.round(rawBalance * 10000000) : Math.round(rawBalance);
-  const balanceUSD = parseFloat((user as User)?.usdBalance || "0");
-  const balanceBUG = parseFloat((user as User)?.bugBalance || "0");
-  
-  const userUID = (user as User)?.referralCode || "00000";
-
-  const photoUrl = typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.photo_url;
-  
-  const getDisplayName = (): string => {
-    const typedUser = user as User;
-    if (typedUser?.firstName) {
-      return typedUser.firstName;
+  const handleShareWithFriends = useCallback(() => {
+    if (!referralLink) return;
+    const tgWebApp = (window as any).Telegram?.WebApp;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent("Join me on CashWatch and earn rewards together!")}`;
+    if (tgWebApp?.openTelegramLink) {
+      tgWebApp.openTelegramLink(shareUrl);
+    } else {
+      window.open(shareUrl, '_blank');
     }
-    return 'Guest';
-  };
-  
-  const displayName = getDisplayName();
-  const userRank = leaderboardData?.userEarnerRank?.rank;
-  const canClaimStreak = timeUntilNextClaim === "Available now" && !hasClaimed;
+    setShareWithFriendsStep('ready');
+  }, [referralLink]);
 
-  const botUsername = import.meta.env.VITE_BOT_USERNAME || 'PaidAdzbot';
-  const webAppName = import.meta.env.VITE_WEBAPP_NAME || 'app';
-  const referralLink = userData?.referralCode 
-    ? `https://t.me/${botUsername}/${webAppName}?startapp=${userData.referralCode}`
-    : '';
-
-  // Mutation handlers for Daily Tasks
   const shareWithFriendsMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/missions/share-story/claim', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
+      const res = await apiRequest("POST", "/api/missions/claim", { missionId: 'shareStory' });
+      return res.json();
     },
-    onSuccess: (data) => {
-      showNotification(`+${data.reward} PAD claimed!`, 'success');
-      setShareWithFriendsStep('idle');
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/missions/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-    },
-    onError: (error: Error) => {
-      showNotification(error.message, 'error');
+      showNotification("Rewards claimed!", "success");
       setShareWithFriendsStep('idle');
-    },
+    }
   });
+
+  const handleClaimShareWithFriends = useCallback(() => {
+    shareWithFriendsMutation.mutate();
+  }, [shareWithFriendsMutation]);
 
   const dailyCheckinMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/missions/daily-checkin/claim', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
+      const res = await apiRequest("POST", "/api/missions/claim", { missionId: 'dailyCheckin' });
+      return res.json();
     },
-    onSuccess: (data) => {
-      showNotification(`+${data.reward} PAD claimed!`, 'success');
-      setDailyCheckinStep('idle');
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/missions/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-    },
-    onError: (error: Error) => {
-      showNotification(error.message, 'error');
+      showNotification("Daily check-in successful!", "success");
       setDailyCheckinStep('idle');
-    },
-  });
-
-  const checkForUpdatesMutation = useMutation({
-    mutationFn: async () => {
-      // Step 1: Real-time verification via Telegram Bot API
-      const resVerify = await fetch('/api/tasks/verify/channel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: '@MoneyAdz' }),
-        credentials: 'include',
-      });
-      
-      const verifyData = await resVerify.json();
-      if (!resVerify.ok || !verifyData.isJoined) {
-        throw new Error('Please join the channel to complete this task.');
-      }
-
-      // Step 2: Claim reward if verified
-      const response = await fetch('/api/missions/check-for-updates/claim', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      showNotification(`+${data.reward} PAD claimed!`, 'success');
-      setCheckForUpdatesStep('idle');
-      queryClient.invalidateQueries({ queryKey: ['/api/missions/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-    },
-    onError: (error: Error) => {
-      showNotification(error.message, 'error');
-      setCheckForUpdatesStep('idle');
-    },
-  });
-
-  const handleShareWithFriends = useCallback(async () => {
-    if (missionStatus?.shareStory?.claimed || !referralLink) return;
-    setShareWithFriendsStep('sharing');
-    try {
-      const tgWebApp = window.Telegram?.WebApp as any;
-      if (tgWebApp?.shareMessage) {
-        try {
-          const response = await fetch('/api/share/prepare-message', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' }
-          });
-          const data = await response.json();
-          if (data.success && data.messageId) {
-            tgWebApp.shareMessage(data.messageId, (success: boolean) => {
-              setShareWithFriendsStep('ready');
-            });
-            return;
-          } else if (data.fallbackUrl) {
-            tgWebApp.openTelegramLink(data.fallbackUrl);
-            setShareWithFriendsStep('ready');
-            return;
-          }
-        } catch (error) {
-          console.error('Prepare message error:', error);
-        }
-      }
-      const shareTitle = `💵 Get paid for completing tasks and watching ads.`;
-      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(shareTitle)}`;
-      if (tgWebApp?.openTelegramLink) {
-        tgWebApp.openTelegramLink(shareUrl);
-      } else {
-        window.open(shareUrl, '_blank');
-      }
-      setShareWithFriendsStep('ready');
-    } catch (error) {
-      console.error('Share error:', error);
-      setShareWithFriendsStep('ready');
     }
-  }, [missionStatus?.shareStory?.claimed, referralLink]);
-
-  const handleClaimShareWithFriends = useCallback(() => {
-    if (shareWithFriendsMutation.isPending) return;
-    setShareWithFriendsStep('claiming');
-    shareWithFriendsMutation.mutate();
-  }, [shareWithFriendsMutation]);
+  });
 
   const handleDailyCheckin = useCallback(async () => {
     if (missionStatus?.dailyCheckin?.claimed || dailyCheckinStep !== 'idle') return;
@@ -790,9 +681,22 @@ export default function Home() {
     dailyCheckinMutation.mutate();
   }, [dailyCheckinMutation]);
 
+  const checkForUpdatesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/missions/claim", { missionId: 'checkForUpdates' });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/missions/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      showNotification("Rewards claimed!", "success");
+      setCheckForUpdatesStep('idle');
+    }
+  });
+
   const handleCheckForUpdates = useCallback(() => {
     if (missionStatus?.checkForUpdates?.claimed || checkForUpdatesStep !== 'idle') return;
-    const tgWebApp = window.Telegram?.WebApp as any;
+    const tgWebApp = (window as any).Telegram?.WebApp;
     const channelUrl = 'https://t.me/MoneyAdz';
     if (tgWebApp?.openTelegramLink) {
       tgWebApp.openTelegramLink(channelUrl);
@@ -821,142 +725,130 @@ export default function Home() {
     checkForUpdatesMutation.mutate();
   }, [checkForUpdatesMutation]);
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="flex gap-1 justify-center mb-4">
+            <div className="w-2 h-2 rounded-full bg-[#4cd3ff] animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-2 h-2 rounded-full bg-[#4cd3ff] animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-2 h-2 rounded-full bg-[#4cd3ff] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          </div>
+          <div className="text-foreground font-medium">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  const userRank = leaderboardData?.userEarnerRank?.rank;
+
   return (
     <Layout>
-      <main className="max-w-md mx-auto px-4 pt-[14px]">
-        <div className="flex flex-col items-center mb-3">
-          {photoUrl ? (
-            <img 
-              src={photoUrl} 
-              alt="Profile" 
-              className={`w-24 h-24 rounded-full border-4 border-[#4cd3ff] shadow-[0_0_20px_rgba(76,211,255,0.5)] ${isAdmin ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-              onClick={() => isAdmin && setLocation("/admin")}
-            />
-          ) : (
-            <div 
-              className={`w-24 h-24 rounded-full bg-gradient-to-br from-[#4cd3ff] to-[#b8b8b8] flex items-center justify-center border-4 border-[#4cd3ff] shadow-[0_0_20px_rgba(76,211,255,0.5)] ${isAdmin ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-              onClick={() => isAdmin && setLocation("/admin")}
-            >
-              <span className="text-black font-bold text-3xl">
-                {displayName.charAt(0).toUpperCase()}
+      <main className="max-w-md mx-auto px-4 pt-4 pb-8">
+        {/* Profile Card Section */}
+        <div className="bg-[#0d0d0d] rounded-[24px] p-4 mb-3 border border-[#1a1a1a]">
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex items-center gap-2.5">
+              {photoUrl ? (
+                <img 
+                  src={photoUrl} 
+                  alt="Profile" 
+                  className={`w-11 h-11 rounded-full object-cover shadow-md ${isAdmin ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                  onClick={() => isAdmin && setLocation("/admin")}
+                />
+              ) : (
+                <div 
+                  className={`w-11 h-11 rounded-full bg-[#1a1a1a] flex items-center justify-center border border-white/5 ${isAdmin ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                  onClick={() => isAdmin && setLocation("/admin")}
+                >
+                  <UserIcon className="w-6 h-6 text-gray-400" />
+                </div>
+              )}
+              <div className="flex flex-col -space-y-0.5">
+                <span 
+                  className={`text-white font-bold text-base leading-none ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  onClick={() => isAdmin && setLocation("/admin")}
+                >
+                  {(user as User)?.firstName || (user as User)?.username || (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.first_name || "User"}
+                </span>
+                <div 
+                  className={`bg-[#B9FF66]/10 px-2 py-0.5 rounded-full w-fit mt-1 ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  onClick={() => isAdmin && setLocation("/admin")}
+                >
+                  <span className="text-[#B9FF66] text-[9px] font-bold tracking-tight">
+                    UID: {userUID}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 relative z-[100]">
+              <div 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log("Connect wallet clicked");
+                }}
+                className="bg-[#1a1a1a] hover:bg-[#222] text-[#B9FF66] rounded-full px-5 py-2.5 text-sm font-bold border border-[#B9FF66]/20 transition-all shadow-sm cursor-pointer"
+              >
+                Connect wallet
+              </div>
+              <div
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log("Settings clicked, opening popup...");
+                  setSettingsOpen(true);
+                }}
+                className="w-10 h-10 rounded-full bg-[#1a1a1a] border border-white/5 text-[#8E8E93] hover:text-white hover:bg-[#222] transition-colors flex items-center justify-center cursor-pointer"
+              >
+                <Settings className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Balance Card Section */}
+          <div className="bg-[#141414] rounded-2xl px-4 py-3 flex justify-between items-center mb-4 border border-white/5">
+            <div className="flex flex-col items-center flex-1">
+              <span className="text-[#8E8E93] text-[9px] font-semibold uppercase tracking-wider mb-0.5">Total Points Earned</span>
+              <span className="text-white text-lg font-black tabular-nums">
+                {padBalance.toLocaleString()}
               </span>
             </div>
-          )}
-          
-          {userRank && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-[#4cd3ff]/20 to-[#b8b8b8]/20 border border-[#4cd3ff]/30 -mt-2">
-              <Award className="w-3 h-3 text-[#4cd3ff]" />
-              <span className="text-[10px] font-bold text-[#4cd3ff]">#{userRank}</span>
+            <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+            <div className="flex flex-col items-center flex-1">
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="text-[#8E8E93] text-[9px] font-semibold uppercase tracking-wider">Total BUZZ Earned</span>
+                <div className="bg-[#B9FF66] rounded-full p-0.5 flex-shrink-0">
+                  <Info className="w-2 h-2 text-black" />
+                </div>
+              </div>
+              <span className="text-white text-lg font-black tabular-nums">
+                {balanceBUG.toFixed(1)}
+              </span>
             </div>
-          )}
-          
-          <h1 className="text-lg font-bold text-white mt-1">{displayName}</h1>
-          <p className="text-xs text-gray-400 -mt-0.5">UID: {userUID}</p>
-        </div>
+          </div>
 
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          <Button
-            onClick={handleConvertClick}
-            disabled={isConverting || convertMutation.isPending}
-            className="h-12 bg-gradient-to-br from-[#1a1a1a] to-[#0d0d0d] border border-[#4cd3ff]/30 hover:border-[#4cd3ff] hover:bg-[#4cd3ff]/10 transition-all rounded-full flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg"
-          >
-            {isConverting || convertMutation.isPending ? (
-              <>
-                <Clock className="w-4 h-4 text-[#4cd3ff] animate-spin" />
-                <span className="text-white font-medium text-xs">Converting...</span>
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4 text-[#4cd3ff]" />
-                <span className="text-white font-medium text-xs">Convert</span>
-              </>
-            )}
-          </Button>
-
-          <Button
-            onClick={handleClaimStreak}
-            disabled={isClaimingStreak || !canClaimStreak}
-            className="h-12 bg-gradient-to-br from-[#1a1a1a] to-[#0d0d0d] border border-[#4cd3ff]/30 hover:border-[#4cd3ff] hover:bg-[#4cd3ff]/10 transition-all rounded-full flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg"
-          >
-            {isClaimingStreak ? (
-              <>
-                <Loader2 className="w-4 h-4 text-[#4cd3ff] animate-spin" />
-                <span className="text-white font-medium text-xs">Claiming...</span>
-              </>
-            ) : canClaimStreak ? (
-              <>
-                <Flame className="w-4 h-4 text-[#4cd3ff]" />
-                <span className="text-white font-medium text-xs">Claim Bonus</span>
-              </>
-            ) : (
-              <>
-                <Flame className="w-4 h-4 text-[#4cd3ff] opacity-50" />
-                <span className="text-white font-medium text-xs opacity-70">{timeUntilNextClaim}</span>
-              </>
-            )}
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          <Button
-            onClick={() => setPromoPopupOpen(true)}
-            className="h-12 bg-gradient-to-br from-[#1a1a1a] to-[#0d0d0d] border border-purple-500/30 hover:border-purple-500 hover:bg-purple-500/10 transition-all rounded-full flex items-center justify-center gap-2 shadow-lg"
-          >
-            <Gift className="w-4 h-4 text-purple-400" />
-            <span className="text-white font-medium text-xs">Promo</span>
-          </Button>
-
-          <Button
-            onClick={handleBoosterClick}
-            className="h-12 bg-gradient-to-br from-[#1a1a1a] to-[#0d0d0d] border border-orange-500/30 hover:border-orange-500 hover:bg-orange-500/10 transition-all rounded-full flex items-center justify-center gap-2 shadow-lg"
-          >
-            <CalendarCheck className="w-4 h-4 text-orange-400" />
-            <span className="text-white font-medium text-xs">Daily Task</span>
-          </Button>
+          {/* Action Buttons */}
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              onClick={handleConvertClick}
+              className="bg-[#1a1a1a] hover:bg-[#222] text-[#B9FF66] rounded-2xl py-3.5 text-sm font-bold flex items-center justify-center gap-2 border border-[#B9FF66]/10 h-auto transition-transform active:scale-95"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Convert
+            </Button>
+            <Button
+              onClick={() => setPromoPopupOpen(true)}
+              className="bg-[#B9FF66] hover:bg-[#a8e65a] text-black rounded-2xl py-3.5 text-sm font-bold flex items-center justify-center gap-2 border-none h-auto transition-transform active:scale-95 shadow-md shadow-[#B9FF66]/5"
+            >
+              <Ticket className="w-4 h-4" />
+              Promo
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3">
           <AdWatchingSection user={user as User} />
-        </div>
-
-        <div className="mt-3 px-0">
-          <div className="bg-[#0d0d0d] rounded-xl border border-[#1a1a1a] p-3 mb-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                  <Rocket className="w-7 h-7 text-[#4cd3ff] drop-shadow-[0_0_8px_rgba(76,211,255,0.4)]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white leading-tight">Extra Rewards</h3>
-                  <div className="flex items-center gap-3 mt-2">
-                    <div className="flex items-center gap-1.5">
-                      <DiamondIcon size={12} />
-                      <span className="text-xs font-semibold text-[#4cd3ff]">{appSettings?.rewardPerAd || '2'} PAD</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center">
-                <button
-                  onClick={handleWatchExtraAd}
-                  disabled={(user as any)?.extraAdsWatchedToday >= 100 || isTaskPending}
-                  className="btn-primary px-4 py-2 flex items-center gap-2 w-fit justify-center text-sm disabled:opacity-50"
-                >
-                  {isTaskPending ? (
-                    <>
-                      <Clock size={14} className="animate-spin" />
-                      <span className="font-semibold">Loading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={14} className="group-hover:scale-110 transition-transform" />
-                      <span className="font-semibold">{(user as any)?.extraAdsWatchedToday || 0}/100</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div className="mt-3 px-0">
@@ -1123,7 +1015,7 @@ export default function Home() {
                       disabled={true}
                       className="h-8 w-20 text-xs font-bold rounded-lg bg-purple-600 text-white"
                     >
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Watching...
                     </Button>
                   ) : dailyCheckinStep === 'ready' || dailyCheckinStep === 'claiming' ? (
                     <Button
@@ -1136,9 +1028,9 @@ export default function Home() {
                   ) : (
                     <Button
                       onClick={handleDailyCheckin}
-                      className="h-8 w-16 text-xs font-bold rounded-lg bg-blue-500 hover:bg-blue-600 text-white"
+                      className="h-8 w-20 text-xs font-bold rounded-lg bg-[#4cd3ff] hover:bg-[#3db8e0] text-black"
                     >
-                      Go
+                      Check-in
                     </Button>
                   )}
                 </div>
@@ -1147,7 +1039,7 @@ export default function Home() {
               <div className="flex items-center justify-between bg-[#1a1a1a] rounded-lg p-3 hover:bg-[#222] transition">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <Bell className="w-4 h-4 text-[#4cd3ff]" />
+                    <Rocket className="w-4 h-4 text-[#4cd3ff]" />
                     <p className="text-white text-sm font-medium truncate">Check for Updates</p>
                   </div>
                   <div className="text-xs text-gray-400 ml-6">
@@ -1159,84 +1051,77 @@ export default function Home() {
                     <div className="h-8 w-20 rounded-lg bg-green-500/20 flex items-center justify-center">
                       <Check className="w-4 h-4 text-green-400" />
                     </div>
+                  ) : checkForUpdatesStep === 'opened' ? (
+                    <div className="h-8 w-20 flex items-center justify-center gap-1 bg-[#1a1a1a] border border-[#4cd3ff]/30 rounded-lg">
+                      <Clock size={12} className="text-[#4cd3ff]" />
+                      <span className="text-white text-xs font-bold">{checkForUpdatesCountdown}s</span>
+                    </div>
                   ) : checkForUpdatesStep === 'ready' || checkForUpdatesStep === 'claiming' ? (
                     <Button
                       onClick={handleClaimCheckForUpdates}
                       disabled={checkForUpdatesMutation.isPending}
                       className="h-8 w-20 text-xs font-bold rounded-lg bg-green-500 hover:bg-green-600 text-white"
                     >
-                      {checkForUpdatesMutation.isPending || checkForUpdatesStep === 'claiming' ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Claim'}
-                    </Button>
-                  ) : checkForUpdatesStep === 'opened' || checkForUpdatesStep === 'countdown' ? (
-                    <Button
-                      disabled={true}
-                      className="h-8 w-20 text-xs font-bold rounded-lg bg-blue-500/50 text-white"
-                    >
-                      {checkForUpdatesStep === 'countdown' ? `${checkForUpdatesCountdown}s` : <Loader2 className="w-3 h-3 animate-spin" />}
+                      {checkForUpdatesMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Claim'}
                     </Button>
                   ) : (
                     <Button
                       onClick={handleCheckForUpdates}
-                      className="h-8 w-16 text-xs font-bold rounded-lg bg-blue-500 hover:bg-blue-600 text-white"
+                      className="h-8 w-20 text-xs font-bold rounded-lg bg-orange-500 hover:bg-orange-600 text-white"
                     >
-                      Go
+                      Open
                     </Button>
                   )}
                 </div>
               </div>
             </div>
+
+            <Button
+              onClick={() => setBoosterPopupOpen(false)}
+              className="w-full mt-6 bg-[#1a1a1a] hover:bg-[#222] text-white border border-[#333] rounded-xl"
+            >
+              Close
+            </Button>
           </div>
         </div>
       )}
 
-      {/* Static Create Task Button - Only on Home Page */}
-      <div className="fixed bottom-6 right-4 z-50">
-        <button
-          onClick={() => setLocation('/task/create')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-black text-white font-semibold text-sm border border-gray-700"
-        >
-          <Plus className="w-4 h-4" />
-          Create Task
-        </button>
-      </div>
-
       {promoPopupOpen && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 px-4">
           <div className="bg-[#0d0d0d] rounded-2xl p-6 w-full max-w-sm border border-[#1a1a1a]">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Gift className="w-5 h-5 text-[#4cd3ff]" />
-              <h2 className="text-lg font-bold text-white">Enter Promo Code</h2>
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <Ticket className="w-5 h-5 text-purple-400" />
+              <h2 className="text-lg font-bold text-white">Promo Code</h2>
             </div>
             
-            <Input
-              placeholder="Enter code here"
-              value={promoCode}
-              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-              disabled={redeemPromoMutation.isPending || isApplyingPromo}
-              className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl text-white placeholder:text-gray-500 px-4 py-3 h-12 text-center text-lg font-semibold tracking-wider focus:border-[#4cd3ff] focus:ring-0 mb-4"
-            />
-            
-            <div className="flex gap-3">
-              <Button
-                onClick={() => {
-                  setPromoPopupOpen(false);
-                  setPromoCode("");
-                }}
-                className="flex-1 h-11 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-white font-semibold rounded-xl border border-[#2a2a2a]"
-              >
-                Close
-              </Button>
-              <Button
-                onClick={handleApplyPromo}
-                disabled={redeemPromoMutation.isPending || isApplyingPromo || !promoCode.trim()}
-                className="flex-1 h-11 bg-[#4cd3ff] hover:bg-[#6ddeff] text-black font-semibold rounded-xl disabled:opacity-50"
-              >
-                {redeemPromoMutation.isPending || isApplyingPromo ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Apply"
-                )}
-              </Button>
+            <p className="text-xs text-gray-400 mb-4 text-center">
+              Enter your promo code below to claim special rewards!
+            </p>
+
+            <div className="space-y-4">
+              <Input
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="ENTER CODE"
+                className="bg-[#1a1a1a] border-[#333] text-white font-bold text-center h-12 rounded-xl focus:border-purple-500 transition-all uppercase placeholder:text-gray-600"
+              />
+              
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => setPromoPopupOpen(false)}
+                  variant="outline"
+                  className="flex-1 bg-transparent border-[#333] text-white rounded-xl h-12"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleApplyPromo}
+                  disabled={isApplyingPromo || !promoCode.trim()}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl h-12 shadow-[0_0_15px_rgba(147,51,234,0.3)]"
+                >
+                  {isApplyingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Claim'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1245,94 +1130,101 @@ export default function Home() {
       {convertPopupOpen && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 px-4">
           <div className="bg-[#0d0d0d] rounded-2xl p-6 w-full max-w-sm border border-[#1a1a1a]">
-            <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="flex items-center justify-center gap-2 mb-6">
               <RefreshCw className="w-5 h-5 text-[#4cd3ff]" />
               <h2 className="text-lg font-bold text-white">Convert PAD</h2>
             </div>
-            <div className="flex items-center justify-center gap-1.5 mb-4">
-              <DiamondIcon size={14} />
-              <p className="text-gray-400 text-sm">
-                Available: {balancePAD.toLocaleString()} PAD
-              </p>
-            </div>
-            
-            <div className="space-y-2 mb-4">
-              <Input
-                type="number"
-                placeholder="Enter amount"
-                value={convertAmount}
-                onChange={(e) => setConvertAmount(e.target.value)}
-                className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl text-white placeholder:text-gray-500 px-4 py-3 h-12 focus:border-[#4cd3ff] focus:ring-0 mb-3"
-              />
-              
+
+            <div className="flex bg-[#1a1a1a] p-1 rounded-xl mb-6">
               <button
                 onClick={() => setSelectedConvertType('USD')}
-                className={`w-full p-3 rounded-xl border transition-all flex items-center gap-3 ${
-                  selectedConvertType === 'USD' 
-                    ? 'border-[#4cd3ff] bg-[#4cd3ff]/10' 
-                    : 'border-[#2a2a2a] bg-[#1a1a1a] hover:border-[#3a3a3a]'
-                }`}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${selectedConvertType === 'USD' ? 'bg-[#4cd3ff] text-black shadow-lg' : 'text-gray-400'}`}
               >
-                <div className="w-9 h-9 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-center">
-                  <span className="text-green-400 font-bold text-sm">$</span>
-                </div>
-                <div className="text-left flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <DiamondIcon size={12} />
-                    <span className="text-gray-400 text-xs">→</span>
-                    <span className="text-green-400 font-bold text-xs">USD</span>
-                  </div>
-                  <p className="text-xs text-gray-500">Min: {(appSettings?.minimumConvertPAD || 10000).toLocaleString()} PAD</p>
-                </div>
+                TO USD
               </button>
-              
+              <button
+                onClick={() => setSelectedConvertType('TON')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${selectedConvertType === 'TON' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}
+              >
+                TO TON
+              </button>
               <button
                 onClick={() => setSelectedConvertType('BUG')}
-                className={`w-full p-3 rounded-xl border transition-all flex items-center gap-3 ${
-                  selectedConvertType === 'BUG' 
-                    ? 'border-[#4cd3ff] bg-[#4cd3ff]/10' 
-                    : 'border-[#2a2a2a] bg-[#1a1a1a] hover:border-[#3a3a3a]'
-                }`}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${selectedConvertType === 'BUG' ? 'bg-green-600 text-white shadow-lg' : 'text-gray-400'}`}
               >
-                <div className="w-9 h-9 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-center">
-                  <Bug className="w-4 h-4 text-green-400" />
-                </div>
-                <div className="text-left flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <DiamondIcon size={12} />
-                    <span className="text-gray-400 text-xs">→</span>
-                    <Bug className="w-3 h-3 text-green-400" />
-                    <span className="text-green-400 font-bold text-xs">BUG</span>
-                  </div>
-                  <p className="text-xs text-gray-500">Min: {(appSettings?.minimumConvertPadToBug || 1000).toLocaleString()} PAD</p>
-                </div>
+                TO BUG
               </button>
             </div>
-            
-            <div className="flex gap-3">
-              <Button
-                onClick={() => {
-                  setConvertPopupOpen(false);
-                  setConvertAmount("");
-                }}
-                className="flex-1 h-11 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-white font-semibold rounded-xl border border-[#2a2a2a]"
-              >
-                Close
-              </Button>
-              <Button
-                onClick={handleConvertConfirm}
-                disabled={isConverting || convertMutation.isPending}
-                className="flex-1 h-11 bg-[#4cd3ff] hover:bg-[#6ddeff] text-black font-semibold rounded-xl disabled:opacity-50"
-              >
-                {isConverting || convertMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Convert"
-                )}
-              </Button>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-500 mb-1.5 block ml-1 uppercase font-bold tracking-wider">Amount to Convert</label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    value={convertAmount}
+                    onChange={(e) => setConvertAmount(e.target.value)}
+                    placeholder="0"
+                    className="bg-[#1a1a1a] border-[#333] text-white font-bold h-14 rounded-xl pl-12 focus:border-[#4cd3ff] transition-all"
+                  />
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                    <DiamondIcon size={18} />
+                  </div>
+                  <button 
+                    onClick={() => setConvertAmount(padBalance.toString())}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#4cd3ff] hover:text-white transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-2 ml-1">
+                  Balance: <span className="text-white">{padBalance.toLocaleString()} PAD</span>
+                </p>
+              </div>
+
+              <div className="bg-[#1a1a1a]/50 border border-white/5 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-400 font-medium">Estimated Value</span>
+                  <span className="text-white font-bold">
+                    {selectedConvertType === 'USD' 
+                      ? `$${((parseFloat(convertAmount || "0") / (appSettings?.padToUsdRate || 1000000))).toFixed(4)}`
+                      : selectedConvertType === 'TON'
+                        ? `${(parseFloat(convertAmount || "0") / (appSettings?.padToTonRate || 1000000)).toFixed(4)} TON`
+                        : `${(parseFloat(convertAmount || "0") / (appSettings?.padToBugRate || 1000)).toFixed(2)} BUG`
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-400 font-medium">Fee</span>
+                  <span className="text-white font-bold">0.00%</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => setConvertPopupOpen(false)}
+                  variant="outline"
+                  className="flex-1 bg-transparent border-[#333] text-white rounded-xl h-14"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConvertConfirm}
+                  disabled={isConverting || convertMutation.isPending || !convertAmount}
+                  className="flex-1 bg-[#4cd3ff] hover:bg-[#3db8e0] text-black font-bold rounded-xl h-14 shadow-[0_0_20px_rgba(76,211,255,0.3)]"
+                >
+                  {isConverting || convertMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Convert'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {settingsOpen && (
+        <SettingsPopup 
+          onClose={() => setSettingsOpen(false)} 
+        />
       )}
     </Layout>
   );
